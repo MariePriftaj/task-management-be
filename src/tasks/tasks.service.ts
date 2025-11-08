@@ -1,46 +1,57 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Task } from './schemas/task.schema';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class TasksService {
-  constructor(
-    @InjectModel(Task.name) private taskModel: Model<Task>,
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(@InjectModel(Task.name) private taskModel: Model<Task>) {}
 
-  async create(createTaskDto: CreateTaskDto): Promise<Task> {
-    const user = await this.usersService.findOne(createTaskDto.userId);
-    const task = new this.taskModel({ ...createTaskDto, user: user._id });
-    return task.save();
-  }
-
-  async findAll(): Promise<Task[]> {
-    return this.taskModel.find().populate('user').exec();
-  }
-
-  async findOne(id: string): Promise<Task> {
-    const task = await this.taskModel.findById(id).populate('user').exec();
-    if (!task) throw new NotFoundException('Task not found');
-    return task;
-  }
-
-  async update(id: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
-    if (updateTaskDto.userId) {
-      const user = await this.usersService.findOne(updateTaskDto.userId);
-      //updateTaskDto.user = user._id; e komentova une
+  // CREATE task për user specifik
+  async createForUser(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
+    try {
+      // ✅ konverto dueDate në objekt Date nëse është string
+      const dueDate = createTaskDto.dueDate ? new Date(createTaskDto.dueDate) : undefined;
+      const newTask = new this.taskModel({ ...createTaskDto, userId, dueDate });
+      return await newTask.save();
+    } catch (err) {
+      console.error(err);
+      throw new InternalServerErrorException('Error creating task');
     }
-    const task = await this.taskModel.findByIdAndUpdate(id, updateTaskDto, { new: true });
-    if (!task) throw new NotFoundException('Task not found');
-    return task;
   }
 
-  async remove(id: string): Promise<void> {
-    const result = await this.taskModel.findByIdAndDelete(id);
-    if (!result) throw new NotFoundException('Task not found');
+  // READ të gjitha task-et për user
+  async findAllByUser(userId: string): Promise<Task[]> {
+    return await this.taskModel.find({ userId }).sort({ createdAt: -1 }).exec();
+  }
+
+  // UPDATE task të user
+  async updateForUser(userId: string, taskId: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
+    //nëse dueDate është string, ktheje në Date
+    if (updateTaskDto.dueDate) {
+      updateTaskDto.dueDate = new Date(updateTaskDto.dueDate) as any;
+    }
+    const updatedTask = await this.taskModel.findOneAndUpdate(
+      { _id: taskId, userId },
+      updateTaskDto,
+      { new: true },
+    ).exec();
+
+    if (!updatedTask) {
+      throw new NotFoundException(`Task with ID ${taskId} not found for this user`);
+    }
+
+    return updatedTask;
+  }
+
+  // DELETE task të user
+  async removeForUser(userId: string, taskId: string): Promise<Task> {
+    const deletedTask = await this.taskModel.findOneAndDelete({ _id: taskId, userId }).exec();
+    if (!deletedTask) {
+      throw new NotFoundException(`Task with ID ${taskId} not found for this user`);
+    }
+    return deletedTask;
   }
 }

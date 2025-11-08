@@ -1,20 +1,22 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document } from 'mongoose';
 
 @Schema({ timestamps: true })
 export class Task extends Document {
   @Prop({ required: true })
   title: string;
 
-  @Prop({ required: false })
-  description?: string;
+  @Prop()
+  description: string;
 
-  @Prop({ default: false })
-  isCompleted: boolean;
+  @Prop({ enum: ['todo', 'in-progress', 'done'], default: 'todo' })
+  status: string;
 
-  // Reference to User by ObjectId, no direct import to avoid circular dependency
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  user: Types.ObjectId;
+  @Prop({ type: Date })
+  dueDate: Date;
+
+  @Prop({ required: true })
+  userId: string; //lidhet me user-in
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);
